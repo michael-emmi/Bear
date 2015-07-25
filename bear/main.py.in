@@ -89,7 +89,8 @@ def run(args):
             current = itertools.chain.from_iterable(
                 # creates a sequence of entry generators from an exec,
                 # but filter out non compiler calls before.
-                (format_entry(x) for x in commands if compiler_call(x)))
+                (format_entry(x) for x in commands
+                                 if compiler_call(x) or linker_call(x)))
             # read entries from previous run
             if args.append and os.path.exists(args.cdb):
                 with open(args.cdb) as handle:
@@ -164,7 +165,15 @@ def format_entry(entry):
         return os.path.normpath(fullname)
 
     atoms = classify_parameters(entry['command'])
-    if atoms['action'] <= Action.Compile:
+
+    if linker_call(entry) and atoms['action'] == Action.Link:
+        yield {'directory': entry['directory'],
+               'command': join_command(entry['command']),
+               'file': abspath(entry['directory'], atoms['output']),
+               'objects': map(lambda f: abspath(entry['directory'],f),
+                              filter(is_object_file,atoms.get('files', [])))}
+
+    elif compiler_call(entry) and atoms['action'] == Action.Compile:
         for filename in atoms.get('files', []):
             if is_source_file(filename):
                 yield {'directory': entry['directory'],
@@ -193,6 +202,13 @@ def is_source_file(filename):
     return ext in accepted
 
 
+def is_object_file(filename):
+    """ A predicate to decide the filename is an object file or not. """
+    accepted = {'.o'}
+    __, ext = os.path.splitext(filename)
+    return ext in accepted
+
+
 def compiler_call(entry):
     """ A predicate to decide the entry is a compiler call or not. """
     patterns = [
@@ -200,6 +216,15 @@ def compiler_call(entry):
         re.compile(r'^([^/]*/)*([^-]*-)*g(cc|\+\+)(-\d+(\.\d+){0,2})?$'),
         re.compile(r'^([^/]*/)*([^-]*-)*clang(\+\+)?(-\d+(\.\d+){0,2})?$'),
         re.compile(r'^([^/]*/)*llvm-g(cc|\+\+)$'),
+    ]
+    executable = entry['command'][0]
+    return any((pattern.match(executable) for pattern in patterns))
+
+
+def linker_call(entry):
+    """ A predicate to decide the entry is a linker call or not. """
+    patterns = [
+        re.compile(r'^([^/]*/)*ld$'),
     ]
     executable = entry['command'][0]
     return any((pattern.match(executable) for pattern in patterns))
