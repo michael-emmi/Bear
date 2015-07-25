@@ -90,7 +90,8 @@ def run(args):
                 # creates a sequence of entry generators from an exec,
                 # but filter out non compiler calls before.
                 (format_entry(x) for x in commands
-                                 if compiler_call(x) or linker_call(x)))
+                                 if compiler_call(x)
+                                 or (args.linker_commands and linker_call(x))))
             # read entries from previous run
             if args.append and os.path.exists(args.cdb):
                 with open(args.cdb) as handle:
@@ -324,6 +325,11 @@ def create_parser():
         '--append', '-a',
         action='store_true',
         help="""appends new entries to existing compilation database.""")
+    parser.add_argument(
+        '--linker-commands',
+        dest='linker_commands',
+        action='store_true',
+        help="""include linker commands in the compilation database.""")
 
     testing = parser.add_argument_group('advanced options')
     testing.add_argument(
